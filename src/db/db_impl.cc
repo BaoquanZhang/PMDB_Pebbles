@@ -164,7 +164,7 @@ Options SanitizeOptions(const std::string& dbname,
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
   ClipToRange(&result.max_open_files,    64 + kNumNonTableCacheFiles, 50000);
-  ClipToRange(&result.write_buffer_size, 64<<10,                      1<<30);
+  ClipToRange(&result.write_buffer_size,  64ULL<<10, 1ULL<<63);
   ClipToRange(&result.block_size,        1<<10,                       4<<20);
   if (result.info_log == NULL) {
     // Open a log file in the same directory as the db
@@ -266,7 +266,6 @@ DBImpl::~DBImpl() {
 #ifdef TIMER_LOG_SIMPLE
 	PrintTimerAudit();
 #endif
-
   mutex_.Lock();
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
   bg_compaction_cv_.SignalAll();
@@ -310,6 +309,10 @@ void DBImpl::PrintTimerAudit() {
 
 	  versions_->PrintSeekThreadsStaticTimerAuditIndividual();
 	  versions_->PrintSeekThreadsStaticTimerAuditCumulative();
+      std::cout << "write count: " << write_count << std::endl;
+      std::cout << "read count: " << total_files_read << std::endl;
+      write_count = 0;
+      total_files_read = 0;
 }
 
 Status DBImpl::NewDB() {
@@ -663,6 +666,7 @@ Status DBImpl::WriteLevel0TableGuards(MemTable* mem, VersionEdit* edit,
   int m;
   const uint64_t start_micros = env_->NowMicros();
   std::vector<FileMetaData> meta_list;
+  std::vector<std::vector<std::string>> key_to_update; // keys to update in the index
 
   Iterator* iter = mem->NewIterator();
   std::vector<GuardMetaData*> guards_;
@@ -681,7 +685,7 @@ Status DBImpl::WriteLevel0TableGuards(MemTable* mem, VersionEdit* edit,
     start_timer(BUILD_LEVEL0_TABLES);
     s = BuildLevel0Tables(dbname_, env_, options_, table_cache_, iter, &meta_list,
     					  file_level_filters, versions_, &pending_outputs_, guards_, &mutex_,
-						  reserved_file_numbers, file_level_filter_builder);
+						  reserved_file_numbers, file_level_filter_builder, key_to_update);
     record_timer(BUILD_LEVEL0_TABLES);
 
     start_timer(GET_LOCK_AFTER_BUILD_LEVEL0_TABLES);
@@ -693,6 +697,7 @@ Status DBImpl::WriteLevel0TableGuards(MemTable* mem, VersionEdit* edit,
   start_timer(ADD_LEVEL0_FILES_TO_EDIT);
   uint64_t total_file_size = 0;
   for (unsigned i = 0; i < meta_list.size(); i++) {
+        write_count++;
 		FileMetaData meta = meta_list[i];
 		Log(options_.info_log, "Level-0 table #%llu: %lld bytes %s",
 				(unsigned long long) meta.number,
@@ -709,8 +714,15 @@ Status DBImpl::WriteLevel0TableGuards(MemTable* mem, VersionEdit* edit,
 						  meta.smallest, meta.largest);
 			numbers.push_back(meta.number);
 			total_file_size += meta.file_size;
+			if (USE_SLM_INDEX) {
+			    for (size_t j = 0; j < key_to_update[i].size(); j++) {
+			        slm_index.erase(key_to_update[i][j]);
+			        slm_index[key_to_update[i][j]] = meta.number;
+			    }
+			}
 		}
   }
+  key_to_update.clear();
 
   // Adding the remaining reserved but unused file numbers so that they can be removed from the pending_outputs set
   for (unsigned i = meta_list.size(); i <= num_level0_guards; i++) {
@@ -1145,7 +1157,7 @@ void DBImpl::CleanupCompaction(CompactionState* compact) {
   delete compact;
 }
 
-Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
+Status DBImpl::OpenCompactionOutputFile(std::vector<std::vector<std::string>>& key_vec, CompactionState* compact) {
   assert(compact != NULL);
   assert(compact->builder == NULL);
   uint64_t file_number;
@@ -1158,6 +1170,7 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
     out.smallest.Clear();
     out.largest.Clear();
     compact->outputs.push_back(out);
+    key_vec.emplace_back();
     mutex_.Unlock();
   }
 
@@ -1239,7 +1252,8 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   return s;
 }
 
-Status DBImpl::InstallCompactionResults(CompactionState* compact, const int level_to_add_new_files,
+Status DBImpl::InstallCompactionResults(std::vector<std::vector<std::string>>& key_vec,
+        CompactionState* compact, const int level_to_add_new_files,
 		std::vector<uint64_t> file_numbers, std::vector<std::string*> file_level_filters) {
   mutex_.AssertHeld();
   Log(options_.info_log,  "Compacted %lu@%d + %lu@%d files => %lld bytes",
@@ -1249,6 +1263,8 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact, const int leve
       compact->compaction->level() + 1,
       static_cast<long long>(compact->total_bytes));
 
+  write_count += compact->compaction->num_input_files(0)
+          + compact->compaction->num_input_files(1) + compact->outputs.size();
   // Add compaction outputs
   compact->compaction->AddInputDeletions(compact->compaction->edit());
   for (size_t i = 0; i < compact->outputs.size(); i++) {
@@ -1256,7 +1272,15 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact, const int leve
     compact->compaction->edit()->AddFile(
         level_to_add_new_files,
         out.number, out.file_size, out.smallest, out.largest);
+    if (USE_SLM_INDEX) {
+        // update the index for each key-value pairs
+        for (size_t j = 0; j < key_vec[i].size(); j++) {
+            slm_index.erase(key_vec[i][j]);
+            slm_index[key_vec[i][j]] = out.number;
+        }
+    }
   }
+  key_vec.clear();
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_, &bg_log_cv_, &bg_log_occupied_, file_numbers, file_level_filters, 0);
 }
 
@@ -1270,6 +1294,8 @@ Status DBImpl::DoCompactionWorkGuards(CompactionState* compact,
 
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
+  std::vector<std::vector<std::string>> key_vec; // keys to update in slm_index
+                                                 // keys in key_vec[i] <-> file_numbers[i]
   std::vector<uint64_t> file_numbers;
   std::vector<std::string*> file_level_filters;
   int total_input_files = 0, current_level_input_files = 0, next_level_input_files = 0, total_output_files = 0;
@@ -1389,7 +1415,7 @@ Status DBImpl::DoCompactionWorkGuards(CompactionState* compact,
       // Open output file if necessary
       if (compact->builder == NULL) {
     	start_timer(BGC_OPEN_COMPACTION_OUTPUT_FILE);
-        status = OpenCompactionOutputFile(compact);
+        status = OpenCompactionOutputFile(key_vec, compact);
         record_timer(BGC_OPEN_COMPACTION_OUTPUT_FILE);
         if (!status.ok()) {
           break;
@@ -1421,7 +1447,7 @@ Status DBImpl::DoCompactionWorkGuards(CompactionState* compact,
       // Open output file again in case the file was closed after reaching the guard  limit
       if (compact->builder == NULL) {
       	start_timer(BGC_OPEN_COMPACTION_OUTPUT_FILE);
-        status = OpenCompactionOutputFile(compact);
+        status = OpenCompactionOutputFile(key_vec, compact);
         record_timer(BGC_OPEN_COMPACTION_OUTPUT_FILE);
         if (!status.ok()) {
           break;
@@ -1432,6 +1458,10 @@ Status DBImpl::DoCompactionWorkGuards(CompactionState* compact,
       }
       compact->current_output()->largest.DecodeFrom(key);
       compact->builder->Add(key, input->value());
+      if (USE_SLM_INDEX) {
+          std::string str_key = key.ToString().substr(0, 16);
+          key_vec.back().push_back(str_key);
+      }
 
 #ifdef FILE_LEVEL_FILTER
       file_level_filter_builder->AddKey(key);
@@ -1508,7 +1538,7 @@ Status DBImpl::DoCompactionWorkGuards(CompactionState* compact,
 
   start_timer(BGC_INSTALL_COMPACTION_RESULTS);
   if (status.ok()) {
-	  status = InstallCompactionResults(compact, level_written_to, file_numbers, file_level_filters);
+	  status = InstallCompactionResults(key_vec, compact, level_written_to, file_numbers, file_level_filters);
   }
   record_timer(BGC_INSTALL_COMPACTION_RESULTS);
 
@@ -1871,7 +1901,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   start_timer(WRITE_OVERALL_TIME);
   start_timer(WRITE_SEQUENCE_WRITE_BEGIN_TOTAL);
   s = SequenceWriteBegin(&w, updates);
-  record_timer(WRITE_SEQUENCE_WRITE_BEGIN_TOTAL);
+  record_timer(WRITE_SEQUENCE_WRITE_BEGIN_TOTAL)
 
   WriteBatch* updates_with_guards = NULL;
   if (s.ok() && updates != NULL) { // NULL batch is for compactions

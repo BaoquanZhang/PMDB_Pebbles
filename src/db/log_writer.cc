@@ -105,7 +105,7 @@ uint64_t Writer::ComputeRecordSize(uint64_t start, uint64_t remain) {
   const uint64_t per_block = kBlockSize - kHeaderSize;
   const uint64_t whole_blocks = remain / per_block;
   const uint64_t leftover = remain % per_block;
-  return start + whole_blocks * kBlockSize + kHeaderSize + leftover;
+  return start + whole_blocks * (uint64_t) kBlockSize + kHeaderSize + leftover;
 }
 
 Status Writer::EmitPhysicalRecordAt(RecordType t, const char* ptr, uint64_t offset, size_t n) {

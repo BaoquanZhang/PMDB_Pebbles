@@ -114,7 +114,7 @@ static bool FLAGS_histogram = false;
 
 // Number of bytes to buffer in memtable before compacting
 // (initialized to default value by "main")
-static int FLAGS_write_buffer_size = 0;
+static size_t FLAGS_write_buffer_size = 0;
 
 // Number of bytes to use as a cache of uncompressed data.
 // Negative means use default settings.
@@ -127,7 +127,7 @@ static int FLAGS_open_files = 0;
 static int FLAGS_block_size = 0;
 
 // Number of next operations to do in a ScanRandom workload
-static int FLAGS_num_next = 1;
+static int FLAGS_num_next = 64;
 
 // Base key which gets added to the randodm key generated
 static int FLAGS_base_key = 0;
@@ -973,8 +973,8 @@ class Benchmark {
       if (method != NULL) {
         RunBenchmark(num_threads, name, method);
       }
+      db_->PrintTimerAudit();
     }
-    db_->PrintTimerAudit();
   }
 
   void print_current_db_contents() {
@@ -1596,6 +1596,7 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; i++) {
     double d;
     int n;
+    size_t buffer_size;
     char junk;
     if (leveldb::Slice(argv[i]).starts_with("--benchmarks=")) {
       FLAGS_benchmarks = argv[i] + strlen("--benchmarks=");
@@ -1619,8 +1620,8 @@ int main(int argc, char** argv) {
       FLAGS_read_threads = n;
     } else if (sscanf(argv[i], "--value_size=%d%c", &n, &junk) == 1) {
       FLAGS_value_size = n;
-    } else if (sscanf(argv[i], "--write_buffer_size=%d%c", &n, &junk) == 1) {
-      FLAGS_write_buffer_size = n;
+    } else if (sscanf(argv[i], "--write_buffer_size=%ld%c", &buffer_size, &junk) == 1) {
+      FLAGS_write_buffer_size = buffer_size;
     } else if (sscanf(argv[i], "--cache_size=%d%c", &n, &junk) == 1) {
       FLAGS_cache_size = n;
     } else if (sscanf(argv[i], "--block_size=%d%c", &n, &junk) == 1) {

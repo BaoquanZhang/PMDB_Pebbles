@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <iostream>
 #include "db/builder.h"
 
 #include "db/filename.h"
@@ -14,6 +15,15 @@
 #include "pebblesdb/iterator.h"
 
 namespace leveldb {
+    /* The index for each key-value pairs
+     * string: key
+     * uint64_t: the file number
+     * */
+    std::map<std::string, uint64_t> slm_index;
+    /* write and read I/O counts */
+    std::atomic<uint64_t> write_count{0};
+    std::atomic<uint64_t> read_count{0};
+
 
 // Finish and check for file errors
 void FinishFileCompletion(Status s,
@@ -67,15 +77,15 @@ Status BuildLevel0Tables(const std::string& dbname,
 				  std::set<uint64_t>* pending_outputs_,
 				  std::vector<GuardMetaData*> complete_guards_,
 				  port::Mutex* mutex_,
-				  uint64_t* reserved_file_numbers,
-				  FileLevelFilterBuilder* file_level_filter_builder) {
+				  const uint64_t* reserved_file_numbers,
+				  FileLevelFilterBuilder* file_level_filter_builder,
+				  std::vector<std::vector<std::string>>& key_to_update) {
 	  Status s;
 	  int meta_index = 0, num_guards = complete_guards_.size();
 	  int num_reserved_file_numbers = num_guards + 1;
 	  int file_number_index = 0;
 	  int count = 0;
 	  int tot_parsed = 0;
-
 	  FileMetaData meta;
 	  WritableFile* file;
 	  TableBuilder* builder;
@@ -111,8 +121,13 @@ Status BuildLevel0Tables(const std::string& dbname,
 							}
 							builder = new TableBuilder(options, file);
 							meta.smallest.DecodeFrom(iter->key());
+							key_to_update.emplace_back();
 					  }
 					  builder->Add(iter->key(), iter->value());
+					  if (USE_SLM_INDEX) {
+					      std::string str_key = iter->key().ToString().substr(0, 16);
+					      key_to_update.back().push_back(str_key);
+					  }
 #ifdef FILE_LEVEL_FILTER
 					  file_level_filter_builder->AddKey(key);
 #endif
@@ -121,22 +136,23 @@ Status BuildLevel0Tables(const std::string& dbname,
 					  tot_parsed++;
 				  } else {
 					  if (count > 0) {
-						  s = builder->Finish();
-						  if (s.ok()) {
-							  meta.file_size = builder->FileSize();
-							  assert(meta.file_size > 0);
-							  meta_list->push_back(meta);
+                          s = builder->Finish();
+                          if (s.ok()) {
+                              meta.file_size = builder->FileSize();
+                              assert(meta.file_size > 0);
+                              meta_list->push_back(meta);
 
-							  // Calculate the filter string for this file
-							  AddFilterString(file_level_filter_builder, index, filter_list, filter_policy, meta.number);
-							  table_cache->SetFileMetaDataMap(meta.number, meta.file_size, meta.smallest, meta.largest);
-						  }
-						  delete builder;
-						  count = 0;
-						  index = 0;
-						  const std::string fname = TableFileName(dbname, meta.number);
-						  FinishFileCompletion(s, meta, file, table_cache, env, fname);
-					  }
+                              // Calculate the filter string for this file
+                              AddFilterString(file_level_filter_builder, index, filter_list, filter_policy,
+                                              meta.number);
+                              table_cache->SetFileMetaDataMap(meta.number, meta.file_size, meta.smallest, meta.largest);
+                          }
+                          delete builder;
+                          count = 0;
+                          index = 0;
+                          const std::string fname = TableFileName(dbname, meta.number);
+                          FinishFileCompletion(s, meta, file, table_cache, env, fname);
+                      }
 					  break;
 				  }
 			  }
@@ -164,6 +180,7 @@ Status BuildLevel0Tables(const std::string& dbname,
 				  	if (file_number_index < num_reserved_file_numbers) {
 				  		meta.number = reserved_file_numbers[file_number_index];
 					  	file_number_index++;
+					  	key_to_update.emplace_back();
 				  	} else {
 					  	mutex_->Lock();
 						meta.number = versions_->NewFileNumber();
@@ -180,6 +197,10 @@ Status BuildLevel0Tables(const std::string& dbname,
 					meta.smallest.DecodeFrom(iter->key());
 			  }
 			  builder->Add(iter->key(), iter->value());
+              if (USE_SLM_INDEX) {
+                  std::string str_key = iter->key().ToString().substr(0, 16);
+                  key_to_update.back().push_back(str_key);
+              }
 
 #ifdef FILE_LEVEL_FILTER
 			  file_level_filter_builder->AddKey(iter->key());
@@ -222,7 +243,6 @@ Status BuildTable(const std::string& dbname,
   Status s;
   meta->file_size = 0;
   iter->SeekToFirst();
-
   std::string fname = TableFileName(dbname, meta->number);
   if (iter->Valid()) {
     WritableFile* file;

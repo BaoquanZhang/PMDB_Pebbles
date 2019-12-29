@@ -171,10 +171,10 @@ class DBImpl : public DB {
 		  std::vector<GuardMetaData*> complete_guards_used_in_bg_compaction,
 		  FileLevelFilterBuilder* file_level_filter_builder)
   	  EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  Status OpenCompactionOutputFile(CompactionState* compact);
+  Status OpenCompactionOutputFile(std::vector<std::vector<std::string>>& key_vec, CompactionState* compact);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input, FileLevelFilterBuilder* file_level_filter_builder,
 		  std::vector<uint64_t>* file_numbers, std::vector<std::string*>* file_level_filters);
-  Status InstallCompactionResults(CompactionState* compact, const int level_to_add_new_files, std::vector<uint64_t> file_numbers, std::vector<std::string*> file_level_filters)
+  Status InstallCompactionResults(std::vector<std::vector<std::string>>& key_vec, CompactionState* compact, const int level_to_add_new_files, std::vector<uint64_t> file_numbers, std::vector<std::string*> file_level_filters)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Constant after construction

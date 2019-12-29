@@ -3,10 +3,11 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "pebblesdb/table_builder.h"
-
+#include <iostream>
 #include <assert.h>
 #include "pebblesdb/comparator.h"
 #include "pebblesdb/env.h"
+#include "pebblesdb/db.h"
 #include "pebblesdb/filter_policy.h"
 #include "pebblesdb/options.h"
 #include "table/block_builder.h"
@@ -208,12 +209,11 @@ Status TableBuilder::status() const {
   return rep_->status;
 }
 
-Status TableBuilder::Finish() {
+Status TableBuilder::Finish(){
   Rep* r = rep_;
   Flush();
   assert(!r->closed);
   r->closed = true;
-
   BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle;
 
   // Write filter block

@@ -4,6 +4,7 @@
 
 #define __STDC_LIMIT_MACROS
 
+#include <iostream>
 #include "db/version_set.h"
 
 #include <algorithm>
@@ -859,6 +860,7 @@ Status Version::Get(const ReadOptions& options,
 #endif
   Slice ikey = k.internal_key();
   Slice user_key = k.user_key();
+  std::string str_key = user_key.ToString().substr(0, 16);
   const Comparator* ucmp = vset_->icmp_.user_comparator();
   Status s;
 
@@ -908,6 +910,13 @@ Status Version::Get(const ReadOptions& options,
     	std::vector<FileMetaData*> files_in_sentinel = sentinel_files_[level];
     	for (size_t i = 0; i < sentinel_files_[level].size(); i++) {
     		FileMetaData* f = sentinel_files_[level][i];
+            // if we use slm_index, and f is not the indexed file,
+            // then we continue
+            if (slm_index.size() > 0 && slm_index.count(str_key) > 0
+                && f->number != slm_index[str_key]) {
+                //std::cout << "filter out a file1" << std::endl;
+                continue;
+            }
     		// Optimization: Adding only the files where the required key lies between smallest and largest
     		if (ucmp->Compare(user_key, f->smallest.user_key()) >= 0
     				&& ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
@@ -927,6 +936,11 @@ Status Version::Get(const ReadOptions& options,
 		vstart_timer(GET_CHECK_GUARD_FILES, BEGIN, 1);
 		for (size_t i = 0; i < g->number_segments; i++) {
 			FileMetaData* f = g->file_metas[i];
+            if (slm_index.size() > 0 && slm_index.count(str_key) > 0
+                && f->number != slm_index[str_key]) {
+                //std::cout << "filter out a file2" << std::endl;
+                continue;
+            }
     		// Optimization: Adding only the files where the required key lies between smallest and largest
     		if (f != NULL && ucmp->Compare(user_key, f->smallest.user_key()) >= 0
     				&& ucmp->Compare(user_key, f->largest.user_key()) <= 0) {

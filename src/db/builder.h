@@ -29,8 +29,9 @@ extern Status BuildLevel0Tables(const std::string& dbname,
 		std::set<uint64_t>* pending_outputs_,
 		std::vector<GuardMetaData*> complete_guards_,
 		port::Mutex* mutex_,
-		uint64_t* reserved_file_numbers,
-		FileLevelFilterBuilder* file_level_filter_builder);
+		const uint64_t* reserved_file_numbers,
+		FileLevelFilterBuilder* file_level_filter_builder,
+		std::vector<std::vector<std::string>>& key_to_update);
 
 // Build a Table file from the contents of *iter.  The generated file
 // will be named according to meta->number.  On success, the rest of

@@ -1,0 +1,1 @@
+./db_bench --benchmarks=fillrandom,overwrite,readrandom,readmissing,scanrandom,readseq,filter --compression_ratio=1 --value_size=512 --num=2000000000 --write_buffer_size=4294967296 --reads=20000000 --db="/home/bzhang/pmdb_test/slmdb"
