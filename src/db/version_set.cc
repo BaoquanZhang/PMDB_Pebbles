@@ -912,10 +912,11 @@ Status Version::Get(const ReadOptions& options,
     		FileMetaData* f = sentinel_files_[level][i];
             // if we use slm_index, and f is not the indexed file,
             // then we continue
-            if (slm_index.size() > 0 && slm_index.count(str_key) > 0
-                && f->number != slm_index[str_key]) {
-                //std::cout << "filter out a file1" << std::endl;
-                continue;
+            if (slm_index.size() > 0) {
+                auto it = slm_index.find(str_key);
+                if (it == slm_index.end() || f->number != it->second) {
+                    continue;
+                }
             }
     		// Optimization: Adding only the files where the required key lies between smallest and largest
     		if (ucmp->Compare(user_key, f->smallest.user_key()) >= 0
@@ -936,10 +937,11 @@ Status Version::Get(const ReadOptions& options,
 		vstart_timer(GET_CHECK_GUARD_FILES, BEGIN, 1);
 		for (size_t i = 0; i < g->number_segments; i++) {
 			FileMetaData* f = g->file_metas[i];
-            if (slm_index.size() > 0 && slm_index.count(str_key) > 0
-                && f->number != slm_index[str_key]) {
-                //std::cout << "filter out a file2" << std::endl;
-                continue;
+            if (slm_index.size() > 0) {
+                auto it = slm_index.find(str_key);
+                if (it == slm_index.end() || f->number != it->second) {
+                    continue;
+                }
             }
     		// Optimization: Adding only the files where the required key lies between smallest and largest
     		if (f != NULL && ucmp->Compare(user_key, f->smallest.user_key()) >= 0

@@ -28,7 +28,7 @@ static const unsigned kL0_SentinelCompactionTrigger = 2;
 
 static const unsigned kL0_GuardCompactionTrigger = 2;
 
-static const unsigned kMaxFilesPerGuardSentinel = 10;
+static const unsigned kMaxFilesPerGuardSentinel = 1;
 
 // Soft limit on number of level-0 files.  We could slow down writes at this
 // point, but don't.

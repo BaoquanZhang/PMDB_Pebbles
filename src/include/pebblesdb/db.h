@@ -22,7 +22,7 @@ static const int kMinorVersion = 17;
 extern std::map<std::string, uint64_t> slm_index;
 extern std::atomic<uint64_t> write_count;
 extern std::atomic<uint64_t> read_count;
-#define USE_SLM_INDEX true
+#define USE_SLM_INDEX false
 
 struct Options;
 struct ReadOptions;
