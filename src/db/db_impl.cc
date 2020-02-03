@@ -667,7 +667,6 @@ Status DBImpl::WriteLevel0TableGuards(MemTable* mem, VersionEdit* edit,
   const uint64_t start_micros = env_->NowMicros();
   std::vector<FileMetaData> meta_list;
   std::vector<std::vector<std::string>> key_to_update; // keys to update in the index
-
   Iterator* iter = mem->NewIterator();
   std::vector<GuardMetaData*> guards_;
   if (base != NULL) {
@@ -714,11 +713,9 @@ Status DBImpl::WriteLevel0TableGuards(MemTable* mem, VersionEdit* edit,
 						  meta.smallest, meta.largest);
 			numbers.push_back(meta.number);
 			total_file_size += meta.file_size;
-			if (USE_SLM_INDEX) {
-			    for (size_t j = 0; j < key_to_update[i].size(); j++) {
-			        slm_index.erase(key_to_update[i][j]);
-			        slm_index[key_to_update[i][j]] = meta.number;
-			    }
+			// update the btree index
+			for (size_t j = 0; j < key_to_update[i].size(); j++) {
+			    btree.add(key_to_update[i][j], meta.number, meta.file_size);
 			}
 		}
   }
@@ -1272,12 +1269,9 @@ Status DBImpl::InstallCompactionResults(std::vector<std::vector<std::string>>& k
     compact->compaction->edit()->AddFile(
         level_to_add_new_files,
         out.number, out.file_size, out.smallest, out.largest);
-    if (USE_SLM_INDEX) {
-        // update the index for each key-value pairs
-        for (size_t j = 0; j < key_vec[i].size(); j++) {
-            slm_index.erase(key_vec[i][j]);
-            slm_index[key_vec[i][j]] = out.number;
-        }
+    // update the index for each key-value pairs
+    for (size_t j = 0; j < key_vec[i].size(); j++) {
+        btree.add(key_vec[i][j], out.number, out.file_size);
     }
   }
   key_vec.clear();
@@ -1660,7 +1654,11 @@ Status DBImpl::Get(const ReadOptions& options,
       record_timer(GET_TIME_TO_CHECK_MEM_IMM);
 
       start_timer(GET_TIME_TO_CHECK_VERSION);
-      s = current->Get(options, lkey, value, &stats);
+      if (USE_SLM_INDEX) {
+          s = current->Get(btree, options, lkey, value, &stats);
+      } else {
+          s = current->Get(options, lkey, value, &stats);
+      }
       total_files_read += current->num_files_read;
       record_timer(GET_TIME_TO_CHECK_VERSION);
 

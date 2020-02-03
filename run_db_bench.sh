@@ -1,0 +1,5 @@
+./build/db_bench --benchmarks=fillrandom,fillrandom,readrandom,readmissing,scanrandom,filter --compression_ratio=1 --value_size=512 --num=10000000 --bloom_bits=0 --write_buffer_size=536870912 --reads=100000 --db="/home/bzhang/pmdb_test"
+#./build/db_bench --benchmarks=fillrandom,fillrandom,readrandom,readmissing,scanrandom,filter --compression_ratio=1 --value_size=512 --num=10000000 --bloom_bits=0 --write_buffer_size=1073741824 --reads=100000 --db="/home/bzhang/pmdb_test"
+#./build/db_bench --benchmarks=fillrandom,fillrandom,readrandom,readmissing,scanrandom,filter --compression_ratio=1 --value_size=512 --num=10000000 --bloom_bits=0 --write_buffer_size=2147483648 --reads=100000 --db="/home/bzhang/pmdb_test"
+#./build/db_bench --benchmarks=fillrandom,fillrandom,readrandom,readmissing,scanrandom,filter --compression_ratio=1 --value_size=512 --num=10000000 --bloom_bits=0 --write_buffer_size=4294967296 --reads=100000 --db="/home/bzhang/pmdb_test"
+#./build/db_bench --benchmarks=fillrandom,readrandom --compression_ratio=1 --value_size=512 --num=1000000 --bloom_bits=0 --write_buffer_size=2097152 --reads=1000000 --db="/home/bzhang/pmdb_test"

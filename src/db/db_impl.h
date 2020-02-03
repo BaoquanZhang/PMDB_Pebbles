@@ -25,6 +25,7 @@
 #include "port/thread_annotations.h"
 #include "util/timer.h"
 #include "db/version_set.h"
+#include "BTree_Wrapper.h"
 
 namespace leveldb {
 #ifdef _LIBCPP_VERSION
@@ -108,6 +109,7 @@ class DBImpl : public DB {
   friend class DB;
   struct CompactionState;
   struct Writer;
+
 
   Iterator* NewInternalIterator(const ReadOptions&, uint64_t number,
                                 SequenceNumber* latest_snapshot,
@@ -263,6 +265,8 @@ class DBImpl : public DB {
   Timer* timer;
 
   int num_bg_compaction_threads_;
+
+  BTree_Wrapper btree;
 
   // Information for ongoing backup processes
   port::CondVar backup_cv_;

@@ -24,6 +24,7 @@
 #include "util/logging.h"
 #include "util/timer.h"
 #include "db/murmurhash3.h"
+#include "BTree_Wrapper.h"
 #include <inttypes.h>
 
 #ifdef TIMER_LOG_SEEK
@@ -910,14 +911,6 @@ Status Version::Get(const ReadOptions& options,
     	std::vector<FileMetaData*> files_in_sentinel = sentinel_files_[level];
     	for (size_t i = 0; i < sentinel_files_[level].size(); i++) {
     		FileMetaData* f = sentinel_files_[level][i];
-            // if we use slm_index, and f is not the indexed file,
-            // then we continue
-            if (slm_index.size() > 0) {
-                auto it = slm_index.find(str_key);
-                if (it == slm_index.end() || f->number != it->second) {
-                    continue;
-                }
-            }
     		// Optimization: Adding only the files where the required key lies between smallest and largest
     		if (ucmp->Compare(user_key, f->smallest.user_key()) >= 0
     				&& ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
@@ -937,12 +930,6 @@ Status Version::Get(const ReadOptions& options,
 		vstart_timer(GET_CHECK_GUARD_FILES, BEGIN, 1);
 		for (size_t i = 0; i < g->number_segments; i++) {
 			FileMetaData* f = g->file_metas[i];
-            if (slm_index.size() > 0) {
-                auto it = slm_index.find(str_key);
-                if (it == slm_index.end() || f->number != it->second) {
-                    continue;
-                }
-            }
     		// Optimization: Adding only the files where the required key lies between smallest and largest
     		if (f != NULL && ucmp->Compare(user_key, f->smallest.user_key()) >= 0
     				&& ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
@@ -1128,6 +1115,60 @@ Status Version::Get(const ReadOptions& options,
   }
 
   return Status::NotFound(Slice());  // Use an empty error message for speed
+}
+
+Status Version::Get(BTree_Wrapper& btree,
+        const ReadOptions& options,
+        const LookupKey& k,
+        std::string* value,
+        GetStats* stats) {
+    Slice ikey = k.internal_key();
+    Slice user_key = k.user_key();
+    std::string str_key = user_key.ToString().substr(0, 16);
+    std::pair<uint64_t, uint64_t> sst_size = std::make_pair(0, 0);
+    sst_size = btree.search(str_key);
+    //std::cout << "start get a key" << std::endl;
+    if (sst_size.second == 0) {
+        //std::cout << "sst size == 0 " << std::endl;
+        return Status::NotFound(Slice());  // Use an empty error message for speed
+    }
+    const Comparator* ucmp = vset_->icmp_.user_comparator();
+    stats->seek_file = NULL;
+    stats->seek_file_level = -1;
+
+    Status s;
+    num_files_read = 0;
+    Saver saver;
+    saver.state = kNotFound;
+    saver.ucmp = ucmp;
+    saver.user_key = user_key;
+    saver.value = value;
+
+    vstart_timer(GET_TABLE_CACHE_GET, BEGIN, 1);
+    s = vset_->table_cache_->Get(options, sst_size.first, sst_size.second,
+                                 ikey, &saver, SaveValue, vset_->timer);
+    stats->seek_file_level = 1;
+    vrecord_timer(GET_TABLE_CACHE_GET, BEGIN, 1);
+    num_files_read++;
+    //std::cout << "get a key" << std::endl;
+    if (!s.ok())
+        return s;
+    switch (saver.state) {
+        case kNotFound:
+            break;      // Keep searching in other files
+        case kFound:
+            return Status::OK();
+        case kDeleted:
+            s = Status::NotFound(Slice());  // Use empty error message for speed
+            return s;
+        case kCorrupt:
+            s = Status::Corruption("corrupted key for ", user_key);
+            return s;
+        default:
+            break;
+    }
+
+    return Status::NotFound(Slice());
 }
 
 bool Version::UpdateStats(const GetStats& stats) {

@@ -24,11 +24,11 @@ static const unsigned kNumLevels = 7;
 // Level-0 compaction is started when we hit this many files.
 static const unsigned kL0_CompactionTrigger = 4;
 
-static const unsigned kL0_SentinelCompactionTrigger = 2;
+static const unsigned kL0_SentinelCompactionTrigger = 4;
 
-static const unsigned kL0_GuardCompactionTrigger = 2;
+static const unsigned kL0_GuardCompactionTrigger = 4;
 
-static const unsigned kMaxFilesPerGuardSentinel = 1;
+static const unsigned kMaxFilesPerGuardSentinel = 10;
 
 // Soft limit on number of level-0 files.  We could slow down writes at this
 // point, but don't.

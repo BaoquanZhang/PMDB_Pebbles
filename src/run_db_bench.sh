@@ -1,3 +1,0 @@
-./db_bench --benchmarks=fillrandom,fillrandom,readrandom,readmissing,scanrandom,filter --compression_ratio=1 --value_size=512 --num=100000000 --bloom_bits=10 --write_buffer_size=1073741824 --reads=1000000 --db="/home/bzhang/pmdb_test/slmdb"
-./db_bench --benchmarks=fillrandom,fillrandom,readrandom,readmissing,scanrandom,filter --compression_ratio=1 --value_size=512 --num=100000000 --bloom_bits=10 --write_buffer_size=2147483648 --reads=1000000 --db="/home/bzhang/pmdb_test/slmdb"
-./db_bench --benchmarks=fillrandom,fillrandom,readrandom,readmissing,scanrandom,filter --compression_ratio=1 --value_size=512 --num=100000000 --bloom_bits=10 --write_buffer_size=6442450944 --reads=1000000 --db="/home/bzhang/pmdb_test/slmdb"

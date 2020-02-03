@@ -94,7 +94,8 @@ Status BuildLevel0Tables(const std::string& dbname,
 
 	  iter->SeekToFirst();
 	  if (iter->Valid()) {
-		  for (int i = 0; i < num_guards; i++) {
+
+	      for (int i = 0; i < num_guards; i++) {
 			  for (; iter->Valid(); iter->Next()) {
 				  Slice key = iter->key();
 

@@ -27,7 +27,7 @@
 #include "db/table_cache.h"
 #include "table/iterator_wrapper.h"
 #include "table/filter_block.h"
-
+#include "BTree_Wrapper.h"
 //#define READ_PARALLEL
 //#define SEEK_PARALLEL
 #define FILE_LEVEL_FILTER
@@ -160,6 +160,8 @@ class Version {
   };
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
+  Status Get(BTree_Wrapper& btree, const ReadOptions&, const LookupKey& key, std::string* val,
+               GetStats* stats);
 
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.

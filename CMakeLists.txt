@@ -96,10 +96,11 @@ include_directories(
         "${PROJECT_SOURCE_DIR}"
 )
 
-add_library(pebblesdb "")
+add_library(pebblesdb "" src/db/BTree_Wrapper.cpp src/db/BTree_Wrapper.h)
 target_sources(pebblesdb
         PRIVATE
         "${PROJECT_SOURCE_DIR}/db/builder.cc"
+        "${PROJECT_SOURCE_DIR}/db/BTree_Wrapper.cpp"
         "${PROJECT_SOURCE_DIR}/db/c.cc"
         "${PROJECT_SOURCE_DIR}/db/dbformat.cc"
         "${PROJECT_SOURCE_DIR}/db/db_impl.cc"
@@ -206,6 +207,7 @@ if (PEBBLESDB_BUILD_TESTS)
     pebblesdb_test("${PROJECT_SOURCE_DIR}/issues/issue178_test.cc")
     pebblesdb_test("${PROJECT_SOURCE_DIR}/issues/issue200_test.cc")
     pebblesdb_test("${PROJECT_SOURCE_DIR}/demo/installation_test.cc")
+    pebblesdb_test("${PROJECT_SOURCE_DIR}/db/db_bench.cc")
 endif (PEBBLESDB_BUILD_TESTS)
 
 if(PEBBLESDB_INSTALL)
@@ -218,6 +220,7 @@ if(PEBBLESDB_INSTALL)
             )
     install(
             FILES
+            "${PROJECT_SOURCE_DIR}/${PEBBLESDB_PUBLIC_INCLUDE_DIR}/BTree.h"
             "${PROJECT_SOURCE_DIR}/${PEBBLESDB_PUBLIC_INCLUDE_DIR}/c.h"
             "${PROJECT_SOURCE_DIR}/${PEBBLESDB_PUBLIC_INCLUDE_DIR}/cache.h"
             "${PROJECT_SOURCE_DIR}/${PEBBLESDB_PUBLIC_INCLUDE_DIR}/comparator.h"
